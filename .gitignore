@@ -1,0 +1,4 @@
+# Natural Earth source (40 MB), re-downloaded by prep/build.py when missing
+prep/ne_10m_admin1.geojson
+.venv/
+__pycache__/
