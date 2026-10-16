@@ -27,6 +27,7 @@ export function MapView() {
   const mm = MEASURES[measure]
   const [layers, setLayers] = useState<Record<Layer, boolean>>({ states: true, cities: true, stores: true })
   const [side, setSide] = useState<'cust_city' | 'store'>('cust_city')
+  const [collapsed, setCollapsed] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   const map = useRef<maplibregl.Map | null>(null)
   const [geo, setGeo] = useState<Geo | null>(null)
@@ -228,38 +229,41 @@ export function MapView() {
 
   const loading = states.loading || cities.loading || stores.loading
   return (
-    <div className="map-layout">
-      <div className="map-box">
-        <div ref={box} style={{ position: 'absolute', inset: 0 }} />
-        <div className="map-controls">
-          <strong style={{ fontFamily: 'var(--font-display)', fontSize: 13 }}>{mm.label}</strong>
-          {(['states', 'cities', 'stores'] as Layer[]).map((l) => (
-            <label key={l}>
-              <input type="checkbox" checked={layers[l]} onChange={(e) => setLayers({ ...layers, [l]: e.target.checked })} />
-              {l === 'states' ? 'États des clients (aplat)' : l === 'cities' ? 'Villes des clients (bulles)' : 'Magasins (points)'}
-            </label>
-          ))}
-          {fc && layers.states && (
-            <div className="map-legend">
-              <div className="legend-ramp" style={{ background: `linear-gradient(90deg, ${RAMP.join(',')})` }} />
-              <div className="legend-scale num"><span>{fmtCompact(fc.lo, mm.format)}</span><span>{fmtCompact(fc.hi, mm.format)}</span></div>
-            </div>
-          )}
-          <button className="btn" onClick={fitData}>Recadrer sur les ventes</button>
-          <span style={{ color: 'var(--muted)' }}>Clic : filtrer · Ctrl + clic : ajouter{loading ? ' · calcul…' : ''}</span>
-        </div>
+    <div className="map-full">
+      <div ref={box} className="map-canvas" />
+      <div className="map-controls">
+        <strong style={{ fontFamily: 'var(--font-display)', fontSize: 13 }}>{mm.label}</strong>
+        {(['states', 'cities', 'stores'] as Layer[]).map((l) => (
+          <label key={l}>
+            <input type="checkbox" checked={layers[l]} onChange={(e) => setLayers({ ...layers, [l]: e.target.checked })} />
+            {l === 'states' ? 'États des clients (aplat)' : l === 'cities' ? 'Villes des clients (bulles)' : 'Magasins (points)'}
+          </label>
+        ))}
+        {fc && layers.states && (
+          <div className="map-legend">
+            <div className="legend-ramp" style={{ background: `linear-gradient(90deg, ${RAMP.join(',')})` }} />
+            <div className="legend-scale num"><span>{fmtCompact(fc.lo, mm.format)}</span><span>{fmtCompact(fc.hi, mm.format)}</span></div>
+          </div>
+        )}
+        <button className="btn" onClick={fitData}>Recadrer sur les ventes</button>
+        <span style={{ color: 'var(--muted)' }}>Clic : filtrer · Ctrl + clic : ajouter{loading ? ' · calcul…' : ''}</span>
       </div>
-      <div className="map-side">
-        <Panel
-          title={side === 'cust_city' ? 'Villes des clients' : 'Magasins'}
-          sub="Top 30 — cliquer pour filtrer"
-          loading={sideRows.loading}
-          error={sideRows.error}
-          actions={<Seg label="Liste" value={side} onChange={setSide} options={[{ value: 'cust_city', label: 'Villes' }, { value: 'store', label: 'Magasins' }]} />}
-        >
-          <BarList dim={side} rows={sideRows.data ?? []} measure={measure} />
-        </Panel>
-      </div>
+      <aside className="map-float" data-collapsed={collapsed}>
+        <button className="map-float-toggle" onClick={() => setCollapsed(!collapsed)} aria-expanded={!collapsed} aria-label={collapsed ? 'Afficher le classement' : 'Masquer le classement'}>
+          {collapsed ? '‹' : '›'}
+        </button>
+        {!collapsed && (
+          <Panel
+            title={side === 'cust_city' ? 'Villes des clients' : 'Magasins'}
+            sub="Top 30 — cliquer pour filtrer"
+            loading={sideRows.loading}
+            error={sideRows.error}
+            actions={<Seg label="Liste" value={side} onChange={setSide} options={[{ value: 'cust_city', label: 'Villes' }, { value: 'store', label: 'Magasins' }]} />}
+          >
+            <BarList dim={side} rows={sideRows.data ?? []} measure={measure} />
+          </Panel>
+        )}
+      </aside>
     </div>
   )
 }

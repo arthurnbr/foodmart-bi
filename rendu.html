@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>FoodMart · Reporting dynamique des ventes 2024</title>
+<style>
+  @page { size: A4; margin: 16mm 18mm; }
+  body { font-family: "Inter", "Helvetica Neue", Arial, sans-serif; color: #1d232a; font-size: 10.5pt; line-height: 1.42; }
+  h1 { font-size: 19pt; margin: 0 0 4pt; }
+  h1 em { color: #c2410c; font-style: italic; }
+  .sub { color: #5b6470; margin: 0 0 14pt; }
+  .link { border: 2px solid #c2410c; border-radius: 8px; padding: 12pt; text-align: center; margin: 0 0 14pt; }
+  .link p { margin: 0 0 6pt; }
+  .link a { font-size: 18pt; font-weight: 700; color: #c2410c; text-decoration: none; }
+  h2 { font-size: 12.5pt; border-bottom: 1px solid #d5d9de; padding-bottom: 3pt; margin: 14pt 0 6pt; }
+  ul { margin: 0; padding-left: 16pt; }
+  li { margin-bottom: 3pt; }
+  table { border-collapse: collapse; width: 100%; font-size: 10pt; }
+  td { border-bottom: 1px solid #e5e8eb; padding: 3pt 6pt; vertical-align: top; }
+  td:first-child { font-weight: 600; white-space: nowrap; width: 24%; }
+</style>
+</head>
+<body>
+  <h1>Food<em>Mart</em> · Reporting dynamique des ventes 2024</h1>
+  <p class="sub">Business Intelligence — C2</p>
+
+  <div class="link">
+    <p>L'ensemble du travail et de ses modalités se trouve en ligne à l'adresse :</p>
+    <a href="https://foodmart.nobrega.fr/">https://foodmart.nobrega.fr/</a>
+  </div>
+
+  <p>Le rendu prend la forme d'une application web interactive plutôt que d'un document statique. Elle couvre les ventes 2024 de 13 magasins FoodMart et s'ouvre directement dans un navigateur, sans installation ni compte.</p>
+
+  <h2>Contenu du site</h2>
+  <table>
+    <tr><td>Vue d'ensemble</td><td>6 indicateurs clés (CA, marge, taux de marge, unités, clients actifs, CA par client), tendance mensuelle, réseau de magasins, treemap produits, 10 profils clients.</td></tr>
+    <tr><td>Carte</td><td>États et villes des clients, localisation des magasins, taux de pénétration.</td></tr>
+    <tr><td>Explorateur</td><td>Tableau croisé en arbre sur n'importe quelle chaîne de dimensions, avec tri et export CSV.</td></tr>
+    <tr><td>Décomposition</td><td>Arbre « d'où vient le chiffre », avec un axe libre à chaque niveau.</td></tr>
+    <tr><td>Promotions</td><td>Part du CA sous promotion, CA par média, rentabilité des campagnes.</td></tr>
+  </table>
+
+  <h2>Modalités d'utilisation</h2>
+  <ul>
+    <li><b>Clic</b> sur un élément : filtre ou descend d'un niveau dans la hiérarchie (drill-down).</li>
+    <li><b>Ctrl + clic</b> : sélection multiple.</li>
+    <li><b>Barre « Contexte »</b> : remonte d'un niveau (drill-up) ou retire un filtre.</li>
+    <li><b>Clic sur un indicateur</b> : change la mesure analysée dans tous les visuels.</li>
+    <li><b>Ctrl K</b> : recherche parmi les produits, marques, villes, clients et campagnes.</li>
+    <li><b>Bouton Précédent</b> du navigateur : annule la dernière action. L'URL conserve la vue, il suffit de la copier pour la partager.</li>
+  </ul>
+
+  <h2>Démarche technique</h2>
+  <ul>
+    <li>Préparation des données CSV avec DuckDB (Python) : nettoyage, jointures du modèle en flocon et export en Parquet.</li>
+    <li>Calcul dans le navigateur avec DuckDB-WASM : chaque interaction exécute une requête SQL en local.</li>
+    <li>Interface en React et TypeScript, graphiques avec Apache ECharts, carte avec MapLibre GL.</li>
+    <li>Corrections apportées aux données, et choix de modélisation, détaillés dans la documentation du projet.</li>
+  </ul>
+</body>
+</html>

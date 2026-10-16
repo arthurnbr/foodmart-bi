@@ -2,12 +2,12 @@
 // Dimension `expr` always yields VARCHAR so filters are uniform `expr IN (...)`.
 
 export type DimKey =
-  | 'quarter' | 'month'
+  | 'semester' | 'quarter' | 'month'
   | 'family' | 'department' | 'category' | 'subcategory' | 'product' | 'brand' | 'low_fat' | 'recyclable' | 'price_band'
-  | 'store_region' | 'store_state' | 'store_city' | 'store' | 'store_type'
+  | 'store_region' | 'store_state' | 'store_city' | 'store' | 'store_type' | 'store_age_band'
   | 'cust_country' | 'cust_state' | 'cust_city' | 'customer'
   | 'marital' | 'gender' | 'income' | 'education' | 'occupation' | 'member_card' | 'houseowner'
-  | 'total_children' | 'children_home' | 'cars' | 'age_band'
+  | 'total_children' | 'children_home' | 'cars' | 'age_band' | 'account_year'
   | 'has_promo' | 'media_type' | 'promo'
 
 export type DimGroup = 'Temps' | 'Produit' | 'Magasin' | 'Localisation client' | 'Profil client' | 'Promotion'
@@ -35,6 +35,7 @@ export const CARD_ORDER = ['Normal', 'Bronze', 'Silver', 'Golden']
 export const PRICE_BAND_EXPR = `CASE WHEN price < 1 THEN '< 1 $' WHEN price < 2 THEN '1–2 $' WHEN price < 3 THEN '2–3 $' ELSE '≥ 3 $' END`
 
 const dims: Dim[] = [
+  { key: 'semester', label: 'Semestre', group: 'Temps', expr: 'semester', order: 'min(semester)' },
   { key: 'quarter', label: 'Trimestre', group: 'Temps', expr: 'quarter', order: 'min(quarter)' },
   { key: 'month', label: 'Mois', group: 'Temps', expr: 'month_name', order: 'min(month)' },
 
@@ -53,6 +54,7 @@ const dims: Dim[] = [
   { key: 'store_city', label: 'Ville (magasin)', group: 'Magasin', expr: 'store_city', searchable: true },
   { key: 'store', label: 'Magasin', group: 'Magasin', expr: 'store_name', searchable: true },
   { key: 'store_type', label: 'Type de magasin', group: 'Magasin', expr: 'store_type', searchable: true },
+  { key: 'store_age_band', label: 'Ancienneté du magasin', group: 'Magasin', expr: 'store_age_band', order: 'min(store_age)' },
 
   { key: 'cust_country', label: 'Pays (client)', group: 'Localisation client', expr: 'cust_country', customerAttr: true },
   { key: 'cust_state', label: 'État (client)', group: 'Localisation client', expr: 'cust_state', customerAttr: true },
@@ -70,6 +72,7 @@ const dims: Dim[] = [
   { key: 'total_children', label: 'Enfants', group: 'Profil client', expr: 'total_children::VARCHAR', order: 'min(total_children)', customerAttr: true },
   { key: 'children_home', label: 'Enfants au foyer', group: 'Profil client', expr: 'children_home::VARCHAR', order: 'min(children_home)', customerAttr: true },
   { key: 'cars', label: 'Voitures', group: 'Profil client', expr: 'cars::VARCHAR', order: 'min(cars)', customerAttr: true },
+  { key: 'account_year', label: 'Client depuis', group: 'Profil client', expr: 'account_year', order: 'min(account_year)', customerAttr: true },
 
   { key: 'has_promo', label: 'Promotion', group: 'Promotion', expr: 'has_promo' },
   { key: 'media_type', label: 'Média', group: 'Promotion', expr: 'media_type', searchable: true },
@@ -82,7 +85,7 @@ export const DIM_GROUPS: DimGroup[] = ['Temps', 'Produit', 'Magasin', 'Localisat
 
 export interface Hierarchy { key: string; label: string; levels: DimKey[] }
 export const HIERARCHIES: Hierarchy[] = [
-  { key: 'time', label: 'Temps', levels: ['quarter', 'month'] },
+  { key: 'time', label: 'Temps', levels: ['semester', 'quarter', 'month'] },
   { key: 'product', label: 'Produit', levels: ['family', 'department', 'category', 'subcategory', 'product'] },
   { key: 'store', label: 'Réseau de magasins', levels: ['store_region', 'store_state', 'store_city', 'store'] },
   { key: 'cust_geo', label: 'Localisation client', levels: ['cust_country', 'cust_state', 'cust_city', 'customer'] },

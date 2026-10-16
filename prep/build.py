@@ -62,7 +62,8 @@ SELECT c.customer_id,
          WHEN date_diff('year', c.birthdate::DATE, DATE '2024-12-31') < 50 THEN '40–49'
          WHEN date_diff('year', c.birthdate::DATE, DATE '2024-12-31') < 60 THEN '50–59'
          WHEN date_diff('year', c.birthdate::DATE, DATE '2024-12-31') < 70 THEN '60–69'
-         ELSE '70+' END AS age_band
+         ELSE '70+' END AS age_band,
+       year(c.date_accnt_opened::DATE)::VARCHAR AS account_year
 FROM {csv('customer')} c
 JOIN region r ON r.region_id = c.customer_region_id
 """)
@@ -77,7 +78,14 @@ SELECT s.store_id,
        s.store_sqft::DOUBLE AS store_sqft,
        s.coffee_bar::BOOL AS coffee_bar, s.video_store::BOOL AS video_store,
        s.salad_bar::BOOL AS salad_bar, s.prepared_food::BOOL AS prepared_food,
-       s.florist::BOOL AS florist
+       s.florist::BOOL AS florist,
+       -- store age at the end of 2024 (all selling stores opened 1951-1981)
+       CASE
+         WHEN 2024 - year(s.first_opened_date::DATE) < 45 THEN '< 45 ans'
+         WHEN 2024 - year(s.first_opened_date::DATE) < 55 THEN '45–54 ans'
+         WHEN 2024 - year(s.first_opened_date::DATE) < 65 THEN '55–64 ans'
+         ELSE '65 ans et +' END AS store_age_band,
+       2024 - year(s.first_opened_date::DATE) AS store_age
 FROM {csv('store')} s
 JOIN region r ON r.region_id = s.region_id   -- sales_region_id is inconsistent: not used
 WHERE s.store_id <> 0
@@ -110,6 +118,7 @@ MONTHS = ["Janv.", "Févr.", "Mars", "Avr.", "Mai", "Juin", "Juil.", "Août", "S
 con.execute(f"""
 CREATE TABLE sales AS
 SELECT v.the_year::INT AS year,
+       CASE WHEN v.month_of_year <= 6 THEN 'S1' ELSE 'S2' END AS semester,
        v.quarter,
        v.month_of_year::INT AS month,
        list_extract({MONTHS!r}, v.month_of_year::INT) AS month_name,

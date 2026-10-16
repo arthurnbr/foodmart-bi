@@ -6,30 +6,42 @@ import { breakdownSql, type BreakdownRow } from '../lib/breakdown'
 import { DIMS, fmt, fmtCompact, fmtDelta, HIERARCHIES, MEASURES, measureSelect, type DimKey, type MeasureKey } from '../lib/model'
 import { where } from '../lib/sql'
 import { drillDepth, useApp } from '../lib/state'
+import { comparison, effectiveMonths, MONTH_NAMES, periodLabel, withMonths } from '../lib/time'
 import { useQuery } from '../lib/useQuery'
 
 const KPI_MEASURES: MeasureKey[] = ['sales', 'margin', 'margin_rate', 'units', 'customers', 'per_customer']
 
 // ------------------------------------------------------------------ KPI strip
+const TIME_DIMS: DimKey[] = ['semester', 'quarter', 'month']
+
 function Kpis() {
   const { filters, measure, setMeasure } = useApp()
-  const w = where(filters, ['month', 'quarter'])
+  const cmp = comparison(filters)
+  const noTime = where(filters, TIME_DIMS)
+  const monthIn = (ms: number[]) => `month IN (${ms.join(',')})`
+  const and = (cond: string) => (noTime ? `${noTime} AND ${cond}` : `WHERE ${cond}`)
   const totals = useQuery(`SELECT ${measureSelect(KPI_MEASURES)} FROM sales ${where(filters)}`)
-  const monthly = useQuery(`SELECT month, ${measureSelect(KPI_MEASURES)} FROM sales ${w} GROUP BY month ORDER BY month`)
+  // comparison: same measures over the current and the previous period (all non-time filters kept)
+  const compare = useQuery(cmp
+    ? `SELECT ${monthIn(cmp.current)} AS cur, ${measureSelect(KPI_MEASURES)} FROM sales ${and(monthIn([...cmp.current, ...cmp.previous]))} GROUP BY 1`
+    : null)
+  const monthly = useQuery(`SELECT month, ${measureSelect(KPI_MEASURES)} FROM sales ${noTime} GROUP BY month ORDER BY month`)
   const t = totals.data?.[0]
   const m = monthly.data ?? []
+  const cur = compare.data?.find((r) => r.cur === true)
+  const prev = compare.data?.find((r) => r.cur === false)
+  const sel = effectiveMonths(filters)
   return (
-    <div className="kpis">
+    <div className="kpis" data-tour="kpis">
       {KPI_MEASURES.map((k) => {
         const series = m.map((r) => Number(r[k]))
-        const last = series.at(-1), prev = series.at(-2)
-        const delta = last != null && prev ? (last - prev) / prev : null
+        const delta = cur && prev && Number(prev[k]) ? (Number(cur[k]) - Number(prev[k])) / Math.abs(Number(prev[k])) : null
         return (
           <button key={k} className="kpi" aria-pressed={measure === k} onClick={() => setMeasure(k)} title={`${MEASURES[k].hint} — cliquer pour analyser cette mesure partout`}>
             <span className="kpi-label">{MEASURES[k].label}</span>
             <span className="kpi-value">{t ? fmt(Number(t[k]), MEASURES[k].format) : '…'}</span>
-            <span className="kpi-meta">
-              <span>Déc. vs nov.</span>
+            <span className="kpi-meta" title={cmp ? `${periodLabel(cmp.current)} comparé à ${periodLabel(cmp.previous)}, mêmes filtres` : 'Pas de période précédente comparable'}>
+              <span>{cmp ? cmp.label : 'Pas de période précédente'}</span>
               <span className={delta == null ? '' : delta >= 0 ? 'delta-up' : 'delta-down'}>{fmtDelta(delta)}</span>
             </span>
             <div className="kpi-spark">
@@ -44,6 +56,11 @@ function Kpis() {
                     type: 'line', data: series, symbol: 'none', smooth: 0.3,
                     lineStyle: { width: 1.6, color: measure === k ? '#5b2a86' : '#a9a4bd' },
                     areaStyle: { color: measure === k ? 'rgba(91,42,134,.12)' : 'rgba(169,164,189,.12)' },
+                    // shade the selected period on the sparkline
+                    markArea: sel ? {
+                      silent: true, itemStyle: { color: 'rgba(242,165,65,.22)' },
+                      data: contiguousRuns(sel).map(([a, b]) => [{ xAxis: String(a) }, { xAxis: String(b) }]),
+                    } : undefined,
                   }],
                 }}
               />
@@ -55,19 +72,30 @@ function Kpis() {
   )
 }
 
+/** [[1,3],[7,7]] for months [1,2,3,7] — markArea needs contiguous runs */
+function contiguousRuns(months: number[]): [number, number][] {
+  const runs: [number, number][] = []
+  for (const m of months) {
+    const last = runs.at(-1)
+    if (last && m === last[1] + 1) last[1] = m
+    else runs.push([m, m])
+  }
+  return runs
+}
+
 // ------------------------------------------------------------------ monthly trend
 function Trend() {
-  const { filters, measure, pick } = useApp()
+  const { filters, measure, replaceFilters } = useApp()
   const [split, setSplit] = useState<DimKey | 'none'>('none')
   const mm = MEASURES[measure]
   const sql = split === 'none'
-    ? `SELECT month, month_name, quarter, ${measureSelect([measure])}, NULL AS s FROM sales ${where(filters, ['month', 'quarter'])} GROUP BY ALL ORDER BY month`
-    : `SELECT month, month_name, quarter, ${measureSelect([measure])}, (${DIMS[split].expr}) AS s FROM sales ${where(filters, ['month', 'quarter'])} GROUP BY ALL ORDER BY month`
+    ? `SELECT month, month_name, quarter, ${measureSelect([measure])}, NULL AS s FROM sales ${where(filters, TIME_DIMS)} GROUP BY ALL ORDER BY month`
+    : `SELECT month, month_name, quarter, ${measureSelect([measure])}, (${DIMS[split].expr}) AS s FROM sales ${where(filters, TIME_DIMS)} GROUP BY ALL ORDER BY month`
   const q = useQuery(sql)
   const rows = useMemo(() => q.data ?? [], [q.data])
   const months = useMemo(() => [...new Map(rows.map((r) => [r.month as number, r.month_name as string])).entries()].sort((a, b) => a[0] - b[0]), [rows])
-  const sel = filters.month
-  const selQ = filters.quarter
+  const selKey = effectiveMonths(filters)?.join(',') ?? ''
+  const sel = useMemo(() => (selKey ? selKey.split(',').map(Number) : null), [selKey])
 
   const option = useMemo(() => {
     const groups = [...new Set(rows.map((r) => String(r.s)))]
@@ -77,10 +105,9 @@ function Trend() {
       stack: split !== 'none' && mm.additive ? 'total' : undefined,
       areaStyle: split !== 'none' && mm.additive ? { opacity: 0.18 } : undefined,
       smooth: 0.25, symbolSize: 6, barMaxWidth: 38,
-      data: months.map(([n, name]) => {
+      data: months.map(([n]) => {
         const r = rows.find((x) => x.month === n && String(x.s) === g)
-        const q = rows.find((x) => x.month === n)?.quarter as string
-        const on = (!sel?.length || sel.includes(name)) && (!selQ?.length || selQ.includes(q))
+        const on = !sel || sel.includes(n)
         return { value: r ? Number(r[measure]) : 0, itemStyle: split === 'none' ? { color: on ? '#5b2a86' : '#d9d3e6', borderRadius: [6, 6, 0, 0] } : undefined }
       }),
     }))
@@ -92,7 +119,7 @@ function Trend() {
       yAxis: { type: 'value', axisLabel: { formatter: (v: number) => fmtCompact(v, mm.format) }, splitLine: { lineStyle: { color: '#eef0f5' } } },
       series,
     }
-  }, [rows, months, split, mm, measure, sel, selQ])
+  }, [rows, months, split, mm, measure, sel])
 
   return (
     <Panel
@@ -111,7 +138,16 @@ function Trend() {
         </>
       }
     >
-      <Chart height={300} option={option} onClick={(e) => pick('month', e.name, e.multi)} />
+      <Chart height={300} option={option} onClick={(e) => {
+        const m = MONTH_NAMES.indexOf(e.name) + 1
+        if (m < 1) return
+        const cur = sel ?? []
+        // click = this month only (re-click clears); Ctrl + click toggles it within the selection
+        const next = e.multi
+          ? (cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m].sort((a, b) => a - b))
+          : (cur.length === 1 && cur[0] === m ? [] : [m])
+        replaceFilters(withMonths(filters, next.length ? next : null))
+      }} />
     </Panel>
   )
 }
@@ -239,7 +275,7 @@ function Profiles() {
       <header className="panel-head" style={{ padding: '8px 0' }}>
         <div>
           <h2 className="panel-title" style={{ fontSize: 20 }}>Qui achète ?</h2>
-          <div className="panel-sub">{MEASURES[measure].label} par profil client — chaque barre est un filtre, tous les visuels se recalculent</div>
+          <div className="panel-sub">{MEASURES[measure].label} par profil client — chaque barre est un filtre, tous les visuels se recalculent. Ces filtres sont aussi dans le bouton « Filtres » de la barre du haut, sur toutes les pages.</div>
         </div>
       </header>
       <div className="profiles">{PROFILE_DIMS.map((d) => <ProfileCard key={d} dim={d} />)}</div>

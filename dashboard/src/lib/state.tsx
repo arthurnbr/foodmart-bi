@@ -2,20 +2,23 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import { DIMS, hierarchyOf, MEASURES, type DimKey, type Hierarchy, type MeasureKey } from './model'
 
 export type Filters = Partial<Record<DimKey, string[]>>
-export type Tab = 'overview' | 'map' | 'explorer' | 'decomp' | 'promo'
+export type Tab = 'overview' | 'map' | 'explorer' | 'decomp' | 'promo' | 'method'
 export const TABS: { key: Tab; label: string; hint: string }[] = [
   { key: 'overview', label: "Vue d'ensemble", hint: 'Indicateurs, tendance, produits, profils' },
   { key: 'map', label: 'Carte', hint: 'Clients et magasins sur la carte' },
   { key: 'explorer', label: 'Explorateur', hint: 'Tableau croisé avec drill-down' },
   { key: 'decomp', label: 'Décomposition', hint: "Arbre : d'où vient le chiffre ?" },
   { key: 'promo', label: 'Promotions', hint: 'Médias, campagnes, rentabilité' },
+  { key: 'method', label: 'Méthodologie', hint: 'Comment ce reporting a été construit' },
 ]
 
-interface State { filters: Filters; measure: MeasureKey; tab: Tab }
+export interface State { filters: Filters; measure: MeasureKey; tab: Tab }
 
 type Action =
   | { type: 'set'; dim: DimKey; values: string[] }
+  | { type: 'drill'; dim: DimKey; value: string; release: DimKey[] }
   | { type: 'clear'; dims?: DimKey[] }
+  | { type: 'filters'; filters: Filters }
   | { type: 'measure'; measure: MeasureKey }
   | { type: 'tab'; tab: Tab }
   | { type: 'replace'; state: State }
@@ -28,6 +31,14 @@ function reducer(s: State, a: Action): State {
       else delete filters[a.dim]
       return { ...s, filters }
     }
+    case 'drill': {
+      // one action = one history entry: pin this level, release the deeper ones
+      const filters = { ...s.filters }
+      for (const d of a.release) delete filters[d]
+      filters[a.dim] = [a.value]
+      return { ...s, filters }
+    }
+    case 'filters': return { ...s, filters: a.filters }
     case 'clear': {
       if (!a.dims) return { ...s, filters: {} }
       const filters = { ...s.filters }
@@ -43,7 +54,7 @@ function reducer(s: State, a: Action): State {
 // ---------------------------------------------------------------- URL (shareable, back button = undo)
 const DEFAULT: State = { filters: {}, measure: 'sales', tab: 'overview' }
 
-function decode(hash: string): State {
+export function decode(hash: string): State {
   const p = new URLSearchParams(hash.replace(/^#/, ''))
   const tab = p.get('tab') as Tab | null
   const m = p.get('m') as MeasureKey | null
@@ -59,7 +70,7 @@ function decode(hash: string): State {
   }
 }
 
-function encode(s: State): string {
+export function encode(s: State): string {
   const p = new URLSearchParams()
   if (s.tab !== DEFAULT.tab) p.set('tab', s.tab)
   if (s.measure !== DEFAULT.measure) p.set('m', s.measure)
@@ -71,9 +82,12 @@ function encode(s: State): string {
 // ---------------------------------------------------------------- context
 interface Api extends State {
   setFilter: (dim: DimKey, values: string[]) => void
+  replaceFilters: (f: Filters) => void
   clear: (dims?: DimKey[]) => void
   setMeasure: (m: MeasureKey) => void
   setTab: (t: Tab) => void
+  /** Restore a saved view; `keepTab` keeps the current page */
+  applyView: (s: State, keepTab?: boolean) => void
   /** Click semantics shared by every visual: drill on hierarchy levels, Ctrl/⌘/Shift = multi-select */
   pick: (dim: DimKey, value: string, multi?: boolean) => void
   drillUp: (h: Hierarchy, depth: number) => void
@@ -105,9 +119,7 @@ export function StateProvider({ children }: { children: ReactNode }) {
     const h = hierarchyOf(dim)
     const idx = h ? h.levels.indexOf(dim) : -1
     if (h && idx < h.levels.length - 1) {
-      // drill down: fix this level, release deeper levels
-      dispatch({ type: 'clear', dims: h.levels.slice(idx + 1) })
-      dispatch({ type: 'set', dim, values: [value] })
+      dispatch({ type: 'drill', dim, value, release: h.levels.slice(idx + 1) })
       return
     }
     dispatch({ type: 'set', dim, values: current.length === 1 && current[0] === value ? [] : [value] })
@@ -116,9 +128,11 @@ export function StateProvider({ children }: { children: ReactNode }) {
   const api = useMemo<Api>(() => ({
     ...state,
     setFilter: (dim, values) => dispatch({ type: 'set', dim, values }),
+    replaceFilters: (filters) => dispatch({ type: 'filters', filters }),
     clear: (dims) => dispatch({ type: 'clear', dims }),
     setMeasure: (measure) => dispatch({ type: 'measure', measure }),
     setTab: (tab) => dispatch({ type: 'tab', tab }),
+    applyView: (v, keepTab) => dispatch({ type: 'replace', state: { ...v, tab: keepTab ? state.tab : v.tab } }),
     pick,
     drillUp: (h, depth) => dispatch({ type: 'clear', dims: h.levels.slice(depth) }),
   }), [state, pick])
